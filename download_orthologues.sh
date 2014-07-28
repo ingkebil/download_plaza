@@ -1,12 +1,19 @@
 #!/bin/bash
 
-# Please save the genes onto the workbench. This will create a list of genes
-# with their respective homologues and orthologues.
+#### BE AWARE! ####
 # When loging in via this script, we add two more entries in the $cookiejar to
 # convince PLAZA that we are human and not a script. It might be that one needs
 # to change the values of the last column: e.g. Q2FrZQ... to match the updated
 # values of your login. You can figure out the new value by loging in and
 # examining the cookies that come with this site.
+####           ####
+
+
+# How does this work?
+# Give a list of valid gene identifiers as arguments.  This script will then
+# scrape the gene identifies of the orthologs on the 'Integrative Orthology
+# Viewer' page and add them to your workbench. After which it will download the
+# upstream regions.
 
 #############
 # variables #
@@ -24,7 +31,7 @@ workbench= # an integer
 
 base_url=http://bioinformatics.psb.ugent.be
 logon_url=$base_url/plaza/versions/plaza_v3_dicots/workbench/logon 
-orth_url=$base_url/plaza/versions/plaza_v3_dicots/genes/index_reduced/gf/on
+orth_url=$base_url/plaza/versions/plaza_v3_dicots/gene_families/view_orthologs/
 workbench_url=$base_url/plaza/versions/plaza_v3_dicots/workbench/subset/$workbench/sp/ath
 
 # yes .. we are a browser, trust me. (we need to fool their webserver or we are being denied with 403)
@@ -48,9 +55,20 @@ echo 'Done.'
 # get the workbench | filter the ortholog names
 echo -n 'Getting orthologous genes ...'
 orthologous_genes=()
-for ortholog in `wget --header "$fake_header" --load-cookies $cookiejar -qO- $workbench_url | sed -n 's/.*\(ORTHO.*\)".*/\1/p'`
+for gene_id in "$@"
 do
-    orthologous_genes=("${orthologous_genes[@]}" `wget --header "$fake_header" --load-cookies $cookiejar -qO- $orth_url/$ortholog/limit:1000 | sed -n 's/.*plaza\/versions\/plaza_v3_dicots\/genes\/view\/\(.*\)".*/\1/p' | grep -v '^AT'`)
+    # 1/ get the page
+    # 2/ split the lines on 'genes/view/'
+    # 3a/ do a non-greedy search on the gene identifiers; match everything between \ngenes/view/ and ")
+    #  b/ print out the gene identifier + \n
+    # 4/ remove the lines that start with > (leftover from 3b)
+    # 5/ remove the lines with Arabidopsis Thaliana identifiers
+    orthologous_genes+=(`wget --header "$fake_header" --load-cookies $cookiejar -qO- $orth_url/$gene_id | \
+        sed -n \
+        -e 's;genes/view/;\n&;g' \
+        -e 's;[^\n]*\ngenes/view/\([^"]*\)";\1\n;gp' \
+        | grep -v '^>' \
+        | grep -v '^AT'`)
 done
 echo 'Done.'
 # sort and make uniq
